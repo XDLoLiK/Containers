@@ -20,6 +20,10 @@ private:
 int main()
 {
 	ms::vector<ms::vector<int>> test(2, ms::vector<int>(3, 1));
+	test.insert(1, ms::vector<int>(2, 2));
+	std::cout << test << std::endl;
+
+	test.erase(1);
 	std::cout << test << std::endl;
 
 	ms::vector<ms::vector<int>> test2 = test;

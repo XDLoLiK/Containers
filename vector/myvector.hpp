@@ -5,7 +5,7 @@
 #include <iostream>
 
 namespace ms {
-	
+
 	template <class T>
 	class vector {
 	public:
@@ -53,7 +53,7 @@ namespace ms {
 		{
 			m_size = other.size();
 			m_capacity = other.capacity();
-			
+
 			m_charData = new char[m_capacity * sizeof (T)];
 			m_data = (T*)m_charData;
 
@@ -67,10 +67,10 @@ namespace ms {
 		{
 			m_size = other.size();
 			m_capacity = other.capacity();
-			
+
 			m_charData = new char[m_capacity * sizeof (T)];
 			m_data = (T*)m_charData;
-			
+
 			if (!m_data && m_capacity) throw std::bad_alloc();
 
 			for (size_t i = 0; i < m_size; i++)
@@ -143,7 +143,7 @@ namespace ms {
 			T* newData = (T*)newCharData;
 
 			if (!m_data && m_capacity) throw std::bad_alloc();
-			
+
 			for (size_t i = 0; i < m_size; i++)
 				new (newData + i) T(m_data[i]);
 
@@ -163,7 +163,7 @@ namespace ms {
 				std::string sizeStr = std::to_string(m_size);
 
 				std::string errorMsg = "vector range check failed: index ("  + posStr + ")" +
-				                       " >= size (" + sizeStr + ")";				
+				                       " >= size (" + sizeStr + ")";
 				throw std::out_of_range(errorMsg);
 			}
 			return m_data[pos];
@@ -201,12 +201,26 @@ namespace ms {
 
 		T& insert(size_t pos, const T& value)
 		{
+			/* Make sure we have at least m_size + 1 capacity */
+			this->reserve(m_size + 1);
 
+			new (m_data + m_size) T(value);
+			for (size_t i = m_size; i > pos; i--)
+				m_data[i] = m_data[i - 1];
+
+			m_data[pos] = value;
+			m_size++;
+
+			return m_data[pos];
 		}
 
-		T& erase(size_t pos)
+		void erase(size_t pos)
 		{
+			for (size_t i = pos; i < m_size - 1; i++)
+				m_data[i] = m_data[i + 1];
 
+			m_size--;
+			m_data[m_size].~T();
 		}
 
 		void push_back(const T& value)
@@ -232,14 +246,32 @@ namespace ms {
 
 			m_size--;
 			m_data[m_size].~T();
-
-			if (m_size <= (m_capacity >> 1))
-				this->shrink_to_fit();
 		}
 
-		void resize(size_t count)
+		void resize(size_t newSize)
 		{
+			if (m_size > newSize) {
+				for (size_t i = newSize; i < m_size; i++)
+					m_data[i].~T();
+			}
+			else if (m_size < newSize) {
+				for (size_t i = m_size; i < newSize; i++)
+					new (m_data + i) T();
+			}
+			m_size = newSize;
+		}
 
+		void resize(size_t newSize, const T& value)
+		{
+			if (m_size > newSize) {
+				for (size_t i = newSize; i < m_size; i++)
+					m_data[i].~T();
+			}
+			else if (m_size < newSize) {
+				for (size_t i = m_size; i < newSize; i++)
+					new (m_data + i) T(value);
+			}
+			m_size = newSize;
 		}
 
 		void swap(vector& other)
@@ -249,7 +281,7 @@ namespace ms {
 			*this = temp;
 		}
 
-	private: 
+	private:
 		size_t m_size = 0;
 		size_t m_capacity = 0;
 		T* m_data = nullptr;
