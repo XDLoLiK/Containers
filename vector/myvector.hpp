@@ -1,97 +1,80 @@
 #pragma once
 
-#include <cstdlib>
-#include <algorithm>
 #include <iostream>
 
 namespace ms {
 
-	template <class T>
+	template <class Type>
 	class vector {
 	public:
 		/* Constructor & Destructor */
 
-		vector()
+		vector():
+			m_size(0),
+			m_capacity(0),
+			m_charData(nullptr),
+			m_data(nullptr)
 		{
 
 		}
 
-		vector(size_t initSize)
+		vector(size_t initSize, const Type& value = Type()):
+			m_size(0),
+			m_capacity(initSize),
+			m_charData(nullptr),
+			m_data(nullptr)
 		{
-			m_size = 0;
-			m_capacity = initSize;
-			m_charData = new char[m_capacity * sizeof (T)];
-			m_data = (T*)m_charData;
+			try {
+				m_charData = new char[m_capacity * sizeof (Type)]();
+				m_data = (Type*)m_charData;
 
-			if (!m_data && initSize) throw std::bad_alloc();
-		}
-
-		vector(size_t initSize, const T& value)
-		{
-			m_size = initSize;
-			m_capacity = initSize;
-
-			m_charData = new char[m_capacity * sizeof (T)];
-			m_data = (T*)m_charData;
-
-			if (!m_data && initSize) throw std::bad_alloc();
-
-			for (size_t i = 0; i < m_size; i++)
-				new (m_data + i) T(value);
+				for ( ; m_size < initSize; m_size++)
+					new (m_data + m_size) Type(value);
+			}
+			catch (...) {
+				this->~vector();
+				throw;
+			}
 		}
 
 		~vector()
 		{
 			for (size_t i = 0; i < m_size; i++)
-				m_data[i].~T();
+				m_data[i].~Type();
+
 			delete [] m_charData;
+
+			m_size     = 0;
+			m_capacity = 0;
+
+			m_charData = nullptr;
+			m_data     = nullptr;
 		}
 
 		/* Operators */
 
-		vector(vector&& other)
+		vector(const vector& other):
+			m_size(0),
+			m_capacity(other.capacity()),
+			m_charData(nullptr),
+			m_data(nullptr)
 		{
-			m_size = other.size();
-			m_capacity = other.capacity();
+			try {
+				m_charData = new char[m_capacity * sizeof (Type)]();
+				m_data = (Type*)m_charData;
 
-			m_charData = new char[m_capacity * sizeof (T)];
-			m_data = (T*)m_charData;
-
-			if (!m_data && m_capacity) throw std::bad_alloc();
-
-			for (size_t i = 0; i < m_size; i++)
-				new (m_data + i) T(other.data()[i]);
+				for ( ; m_size < other.size(); m_size++)
+					new (m_data + m_size) Type(other.data()[m_size]);
+			}
+			catch (...) {
+				this->~vector();
+				throw;
+			}
 		}
 
-		vector(const vector& other)
+		vector& operator=(vector other)
 		{
-			m_size = other.size();
-			m_capacity = other.capacity();
-
-			m_charData = new char[m_capacity * sizeof (T)];
-			m_data = (T*)m_charData;
-
-			if (!m_data && m_capacity) throw std::bad_alloc();
-
-			for (size_t i = 0; i < m_size; i++)
-				new (m_data + i) T(other.data()[i]);
-		}
-
-		vector& operator=(const vector& other)
-		{
-			this->~vector();
-
-			m_size = other.size();
-			m_capacity = other.capacity();
-
-			m_charData = new char[m_capacity * sizeof (T)];
-			m_data = (T*)m_charData;
-
-			if (!m_data && m_capacity) throw std::bad_alloc();
-
-			for (size_t i = 0; i < m_size; i++)
-				new (m_data + i) T(other.data()[i]);
-
+			this->swap(other);
 			return *this;
 		}
 
@@ -107,31 +90,42 @@ namespace ms {
 			return m_size;
 		}
 
+		size_t capacity() const
+		{
+			return m_capacity;
+		}
 
 		void reserve(size_t newCapacity)
 		{
 			if (newCapacity <= m_capacity)
 				return;
 
-			char* newCharData = new char[newCapacity * sizeof (T)];
-			T* newData = (T*)newCharData;
+			size_t curSize = 0;
+			char * newCharData = nullptr;
+			Type * newData = nullptr;
 
-			if (!m_data && m_capacity) throw std::bad_alloc();
+			try {
+				newCharData = new char[newCapacity * sizeof (Type)];
+				newData = (Type*)newCharData;
 
-			for (size_t i = 0; i < m_size; i++)
-				new (newData + i) T(m_data[i]);
+				for ( ; curSize < m_size; curSize++)
+					new (newData + curSize) Type(m_data[curSize]);
 
-			this->~vector();
+				this->~vector();
 
-			m_capacity = newCapacity;
-			m_charData = newCharData;
-			m_data = newData;
+				m_size = curSize;
+				m_capacity = newCapacity;
+				m_charData = newCharData;
+				m_data = newData;
+			}
+			catch (...) {
+				for (size_t i = 0; i < curSize; i++)
+					newData[i].~Type();
 
-		}
-
-		size_t capacity() const
-		{
-			return m_capacity;
+				delete [] newCharData;
+				this->~vector();
+				throw;
+			}
 		}
 
 		void shrink_to_fit()
@@ -139,52 +133,86 @@ namespace ms {
 			if (m_capacity <= m_size)
 				return;
 
-			char* newCharData = new char[m_size * sizeof (T)];
-			T* newData = (T*)newCharData;
+			size_t curSize = 0;
+			char * newCharData = nullptr;
+			Type * newData = nullptr;
 
-			if (!m_data && m_capacity) throw std::bad_alloc();
+			try {
+				newCharData = new char[m_size * sizeof (Type)];
+				newData = (Type*)newCharData;
 
-			for (size_t i = 0; i < m_size; i++)
-				new (newData + i) T(m_data[i]);
+				for ( ; curSize < m_size; curSize++)
+					new (newData + curSize) Type(m_data[curSize]);
 
-			this->~vector();
+				this->~vector();
 
-			m_capacity = m_size;
-			m_charData = newCharData;
-			m_data = newData;
+				m_capacity = m_size;
+				m_charData = newCharData;
+				m_data = newData;
+			}
+			catch (...) {
+				for (size_t i = 0; i < curSize; i++)
+					newData[i].~Type();
+
+				delete [] newCharData;
+				this->~vector();
+				throw;
+			}
 		}
 
 		/* Element access */
 
-		T& at(size_t pos) const
+		const Type& at(size_t pos) const
 		{
-			if (pos >= m_size) {
-				std::string posStr  = std::to_string(pos);
-				std::string sizeStr = std::to_string(m_size);
+			Type& ret = const_cast<vector<Type>*>(this)->at(pos);
+			return const_cast<const Type&>(ret);
+		}
 
-				std::string errorMsg = "vector range check failed: index ("  + posStr + ")" +
-				                       " >= size (" + sizeStr + ")";
-				throw std::out_of_range(errorMsg);
-			}
+		Type& at(size_t pos)
+		{
+			if (pos >= m_size)
+				throw std::out_of_range("vector index is out of range");
+
 			return m_data[pos];
 		}
 
-		T& operator[](size_t pos) const
+		const Type& operator[](size_t pos) const
+		{
+			Type& ret = const_cast<vector<Type>*>(this)->operator[](pos);
+			return const_cast<const Type&>(ret);
+		}
+
+		Type& operator[](size_t pos)
 		{
 			return m_data[pos];
 		}
 
-		T& front() const
+		const Type& front() const
+		{
+			return const_cast<const Type&>(m_data[0]);
+		}
+
+		Type& front()
 		{
 			return m_data[0];
 		}
 
-		T& back() const
+		const Type& back() const
+		{
+			return const_cast<const Type&>(m_data[m_size - 1]);
+		}
+
+		Type& back()
 		{
 			return m_data[m_size - 1];
 		}
 
-		T* data() const
+		const Type* data() const
+		{
+			return const_cast<const Type*>(m_data);
+		}
+
+		Type* data()
 		{
 			return m_data;
 		}
@@ -194,22 +222,30 @@ namespace ms {
 		void clear()
 		{
 			for (size_t i = 0; i < m_size; i++)
-				m_data[i].~T();
+				m_data[i].~Type();
 
 			m_size = 0;
 		}
 
-		T& insert(size_t pos, const T& value)
+		Type& insert(size_t pos, const Type& value)
 		{
-			/* Make sure we have at least m_size + 1 capacity */
-			this->reserve(m_size + 1);
+			pos = (pos > m_size) ? m_size : pos;
+			size_t newCapacity = 1ull << (sizeof m_size * 8 - (size_t)__builtin_clzl(m_size + 1));
+			this->reserve(newCapacity);
 
-			new (m_data + m_size) T(value);
-			for (size_t i = m_size; i > pos; i--)
-				m_data[i] = m_data[i - 1];
+			try {
+				new (m_data + m_size) Type(value);
+				for (size_t i = m_size; i > pos; i--)
+					m_data[i] = m_data[i - 1];
 
-			m_data[pos] = value;
-			m_size++;
+				m_data[pos] = value;
+				m_size++;
+			}
+			catch (...) {
+				m_size++;
+				this->~vector();
+				throw;
+			}
 
 			return m_data[pos];
 		}
@@ -220,23 +256,12 @@ namespace ms {
 				m_data[i] = m_data[i + 1];
 
 			m_size--;
-			m_data[m_size].~T();
+			m_data[m_size].~Type();
 		}
 
-		void push_back(const T& value)
+		void push_back(const Type& value)
 		{
-			if (m_capacity == 0) {
-				this->reserve(1);
-				m_capacity = 1;
-			}
-
-			if (m_size >= m_capacity) {
-				this->reserve(m_capacity << 1);
-				m_capacity <<= 1;
-			}
-
-			new (m_data + m_size) T(value);
-			m_size++;
+			this->insert(m_size, value);
 		}
 
 		void pop_back()
@@ -244,52 +269,49 @@ namespace ms {
 			if (!m_size)
 				return;
 
-			m_size--;
-			m_data[m_size].~T();
+			this->erase(m_size - 1);
 		}
 
-		void resize(size_t newSize)
+		void resize(size_t newSize, const Type& value = Type())
 		{
 			if (m_size > newSize) {
-				for (size_t i = newSize; i < m_size; i++)
-					m_data[i].~T();
+				for ( ; m_size > newSize; m_size--)
+					m_data[m_size - 1].~Type();
 			}
 			else if (m_size < newSize) {
-				for (size_t i = m_size; i < newSize; i++)
-					new (m_data + i) T();
-			}
-			m_size = newSize;
-		}
+				newSize = (newSize > (1ull << 63)) ? (1ull << 63) : newSize;
+				size_t newCapacity = 1ull << (sizeof newSize * 8 - (size_t)__builtin_clzl(newSize));
+				this->reserve(newCapacity);
 
-		void resize(size_t newSize, const T& value)
-		{
-			if (m_size > newSize) {
-				for (size_t i = newSize; i < m_size; i++)
-					m_data[i].~T();
+				try {
+					for (; m_size < newSize; m_size++)
+						new (m_data + m_size) Type(value);
+				}
+				catch (...) {
+					this->~vector();
+					throw;
+				}
 			}
-			else if (m_size < newSize) {
-				for (size_t i = m_size; i < newSize; i++)
-					new (m_data + i) T(value);
-			}
-			m_size = newSize;
 		}
 
 		void swap(vector& other)
 		{
-			vector<T> temp = other;
-			other = *this;
-			*this = temp;
+			std::swap(m_size,     other.m_size);
+			std::swap(m_capacity, other.m_capacity);
+			std::swap(m_charData, other.m_charData);
+			std::swap(m_data,     other.m_data);
 		}
 
 	private:
-		size_t m_size = 0;
+		size_t m_size     = 0;
 		size_t m_capacity = 0;
-		T* m_data = nullptr;
-		char* m_charData = nullptr;
+
+		char* m_charData  = nullptr;
+		Type* m_data      = nullptr;
 	};
 
-	template <class T>
-	std::ostream& operator<<(std::ostream& stream, vector<T>& obj)
+	template <class Type>
+	std::ostream& operator<<(std::ostream& stream, vector<Type>& obj)
 	{
 		for (size_t i = 0; i < obj.size(); i++) {
 			stream << obj.at(i);

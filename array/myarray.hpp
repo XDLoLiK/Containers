@@ -1,13 +1,10 @@
 #pragma once
 
-#include <cstdlib>
-#include <algorithm>
 #include <iostream>
-#include <string>
 
 namespace ms {
 
-	template <class T, size_t S>
+	template <class Type, size_t Size>
 	class array {
 	public:
 		array()
@@ -15,45 +12,40 @@ namespace ms {
 
 		}
 
-		array(const T& initData)
+		array(const Type& initData)
 		{
-			for (size_t i = 0; i < S; i++)
+			for (size_t i = 0; i < Size; i++)
 				m_data[i] = initData;
 		}
 
 		size_t size()
 		{
-			return S;
+			return Size;
 		}
 
-		T& at(size_t pos)
+		Type& at(size_t pos)
 		{
-			if (pos >= S) {
-				std::string posStr  = std::to_string(pos);
-				std::string sizeStr = std::to_string(S);
+			if (pos >= Size)
+				throw std::out_of_range("array index is out of range");
 
-				std::string errorMsg = "array range check failed: index ("  + posStr + ")" +
-				                       " >= size (" + sizeStr + ")";
-				throw std::out_of_range(errorMsg);
-			}
 			return m_data[pos];
 		}
 
-		T& operator[](size_t pos)
+		Type& operator[](size_t pos)
 		{
 			return m_data[pos];
 		}
 
 	private:
-		T m_data[S];
+		Type m_data[Size];
 	};
 
-	template <class T, size_t S>
-	std::ostream& operator<<(std::ostream& stream, array<T, S>& obj)
+	template <class Type, size_t Size>
+	std::ostream& operator<<(std::ostream& stream, array<Type, Size>& obj)
 	{
-		for (size_t i = 0; i < S; i++) {
+		for (size_t i = 0; i < Size; i++) {
 			stream << obj[i];
-			if (i != S - 1)
+			if (i != Size - 1)
 				stream << " ";
 		}
 
