@@ -230,11 +230,11 @@ namespace ms {
 		void resize(size_t newSize, const Type& value = Type())
 		{
 			if (m_size > newSize) {
-				this->release(m_data, newSize, m_size - 1);
+				this->release(m_data, newSize, m_size);
 			}
 			else if (m_size < newSize) {
 				this->reserve(closestPowerOfTwo(newSize));
-				this->initialize(m_data, 0, newSize, value);
+				this->initialize(m_data, m_size, newSize, value);
 				m_size = newSize;
 			}
 		}
