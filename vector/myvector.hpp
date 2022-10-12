@@ -3,6 +3,55 @@
 #include <iostream>
 
 namespace ms {
+	/* ms::vector */
+
+	template <class Type>
+	static inline size_t release(Type* data, size_t start, size_t end)
+	{
+		for (size_t i = start; i < end; i++)
+			data[i].~Type();
+
+		return end - start;
+	}
+
+	template <class Type>
+	static inline size_t initialize(Type* data, size_t start, size_t end, const Type& value)
+	{
+		size_t curSize = start;
+
+		try {
+			for ( ; curSize < end; curSize++)
+				new (data + curSize) Type(value);
+		}
+		catch (...) {
+			release(data, start, curSize);
+			throw;
+		}
+
+		return end - start;
+	}
+
+	template <class Type>
+	static inline size_t copy(Type* dest, size_t start, size_t end, const Type* src)
+	{
+		size_t curSize = start;
+
+		try {
+			for ( ; curSize < end; curSize++)
+				new (dest + curSize) Type(src[curSize]);
+		}
+		catch (...) {
+			release(dest, start, curSize);
+			throw;
+		}
+
+		return end - start;
+	}
+
+	inline size_t closestPowerOfTwo(size_t number)
+	{
+		return 1ull << (sizeof number * 8 - (size_t)__builtin_clzl(newSize));
+	}
 
 	template <class Type>
 	class vector {
@@ -20,16 +69,17 @@ namespace ms {
 
 		vector(size_t initSize, const Type& value = Type()):
 			m_size(0),
-			m_capacity(initSize),
+			m_capacity(0),
 			m_charData(nullptr),
 			m_data(nullptr)
 		{
 			try {
-				m_charData = new char[m_capacity * sizeof (Type)]();
-				m_data = (Type*)m_charData;
+				m_charData = new char[initSize * sizeof (Type)]();
+				m_data     = (Type*)m_charData;
+				m_capacity = initSize;
 
-				for ( ; m_size < initSize; m_size++)
-					new (m_data + m_size) Type(value);
+				initialize(m_data, 0, initSize, value);
+				m_size = initSize;
 			}
 			catch (...) {
 				this->~vector();
@@ -55,16 +105,17 @@ namespace ms {
 
 		vector(const vector& other):
 			m_size(0),
-			m_capacity(other.capacity()),
+			m_capacity(0),
 			m_charData(nullptr),
 			m_data(nullptr)
 		{
 			try {
-				m_charData = new char[m_capacity * sizeof (Type)]();
-				m_data = (Type*)m_charData;
+				m_charData = new char[other.capacity() * sizeof (Type)]();
+				m_data     = (Type*)m_charData;
+				m_capacity = other.capacity();
 
-				for ( ; m_size < other.size(); m_size++)
-					new (m_data + m_size) Type(other.data()[m_size]);
+				copy(m_data, 0, other.size(), other.data());
+				m_size = other.size();
 			}
 			catch (...) {
 				this->~vector();
@@ -100,28 +151,22 @@ namespace ms {
 			if (newCapacity <= m_capacity)
 				return;
 
-			size_t curSize = 0;
-			char * newCharData = nullptr;
-			Type * newData = nullptr;
+			char* newCharData = nullptr;
+			Type* newData     = nullptr;
 
 			try {
 				newCharData = new char[newCapacity * sizeof (Type)];
-				newData = (Type*)newCharData;
+				newData     = (Type*)newCharData;
 
-				for ( ; curSize < m_size; curSize++)
-					new (newData + curSize) Type(m_data[curSize]);
-
+				size_t newSize = copy(newData, 0, m_size, m_data);
 				this->~vector();
 
-				m_size = curSize;
+				m_size     = newSize;
 				m_capacity = newCapacity;
 				m_charData = newCharData;
-				m_data = newData;
+				m_data     = newData;
 			}
 			catch (...) {
-				for (size_t i = 0; i < curSize; i++)
-					newData[i].~Type();
-
 				delete [] newCharData;
 				this->~vector();
 				throw;
@@ -133,27 +178,22 @@ namespace ms {
 			if (m_capacity <= m_size)
 				return;
 
-			size_t curSize = 0;
-			char * newCharData = nullptr;
-			Type * newData = nullptr;
+			char* newCharData = nullptr;
+			Type* newData     = nullptr;
 
 			try {
 				newCharData = new char[m_size * sizeof (Type)];
-				newData = (Type*)newCharData;
+				newData     = (Type*)newCharData;
 
-				for ( ; curSize < m_size; curSize++)
-					new (newData + curSize) Type(m_data[curSize]);
-
+				size_t newSize = copy(newData, 0, m_size, m_data);
 				this->~vector();
 
-				m_capacity = m_size;
+				m_size     = newSize;
+				m_capacity = newSize;
 				m_charData = newCharData;
-				m_data = newData;
+				m_data     = newData;
 			}
 			catch (...) {
-				for (size_t i = 0; i < curSize; i++)
-					newData[i].~Type();
-
 				delete [] newCharData;
 				this->~vector();
 				throw;
@@ -230,7 +270,8 @@ namespace ms {
 		Type& insert(size_t pos, const Type& value)
 		{
 			pos = (pos > m_size) ? m_size : pos;
-			size_t newCapacity = 1ull << (sizeof m_size * 8 - (size_t)__builtin_clzl(m_size + 1));
+			size_t newCapacity = 1ull << (sizeof m_size * 8 - 
+				                         (size_t)__builtin_clzl(m_size + 1));
 			this->reserve(newCapacity);
 
 			try {
@@ -252,11 +293,20 @@ namespace ms {
 
 		void erase(size_t pos)
 		{
-			for (size_t i = pos; i < m_size - 1; i++)
-				m_data[i] = m_data[i + 1];
+			if (pos >= m_size)
+				return;
 
-			m_size--;
-			m_data[m_size].~Type();
+			try {
+				for (size_t i = pos; i < m_size - 1; i++)
+					m_data[i] = m_data[i + 1];
+
+				m_size--;
+				m_data[m_size].~Type();	
+			}
+			catch (...) {
+				this->~vector();
+				throw;
+			}
 		}
 
 		void push_back(const Type& value)
@@ -279,13 +329,13 @@ namespace ms {
 					m_data[m_size - 1].~Type();
 			}
 			else if (m_size < newSize) {
-				newSize = (newSize > (1ull << 63)) ? (1ull << 63) : newSize;
-				size_t newCapacity = 1ull << (sizeof newSize * 8 - (size_t)__builtin_clzl(newSize));
+				newSize = (newSize > m_MAX_SIZE) ? (m_MAX_SIZE) : newSize;
+				size_t newCapacity = closestPowerOfTwo(newSize)
 				this->reserve(newCapacity);
 
 				try {
-					for (; m_size < newSize; m_size++)
-						new (m_data + m_size) Type(value);
+					initialize(m_data, 0, newSize, value);
+					m_size = newSize;
 				}
 				catch (...) {
 					this->~vector();
@@ -303,6 +353,8 @@ namespace ms {
 		}
 
 	private:
+		static const size_t m_MAX_SIZE = 1ull << 32;
+
 		size_t m_size     = 0;
 		size_t m_capacity = 0;
 
