@@ -5,52 +5,9 @@
 namespace ms {
 	/* ms::vector */
 
-	template <class Type>
-	static inline size_t release(Type* data, size_t start, size_t end)
-	{
-		for (size_t i = start; i < end; i++)
-			data[i].~Type();
-
-		return end - start;
-	}
-
-	template <class Type>
-	static inline size_t initialize(Type* data, size_t start, size_t end, const Type& value)
-	{
-		size_t curSize = start;
-
-		try {
-			for ( ; curSize < end; curSize++)
-				new (data + curSize) Type(value);
-		}
-		catch (...) {
-			release(data, start, curSize);
-			throw;
-		}
-
-		return end - start;
-	}
-
-	template <class Type>
-	static inline size_t copy(Type* dest, size_t start, size_t end, const Type* src)
-	{
-		size_t curSize = start;
-
-		try {
-			for ( ; curSize < end; curSize++)
-				new (dest + curSize) Type(src[curSize]);
-		}
-		catch (...) {
-			release(dest, start, curSize);
-			throw;
-		}
-
-		return end - start;
-	}
-
 	inline size_t closestPowerOfTwo(size_t number)
 	{
-		return 1ull << (sizeof number * 8 - (size_t)__builtin_clzl(newSize));
+		return 1ull << (sizeof number * 8 - (size_t)__builtin_clzl(number));
 	}
 
 	template <class Type>
@@ -73,18 +30,12 @@ namespace ms {
 			m_charData(nullptr),
 			m_data(nullptr)
 		{
-			try {
-				m_charData = new char[initSize * sizeof (Type)]();
-				m_data     = (Type*)m_charData;
-				m_capacity = initSize;
+			m_charData = new char[initSize * sizeof (Type)]();
+			m_data     = (Type*)m_charData;
+			m_capacity = initSize;
 
-				initialize(m_data, 0, initSize, value);
-				m_size = initSize;
-			}
-			catch (...) {
-				this->~vector();
-				throw;
-			}
+			this->initialize(m_data, 0, initSize, value);
+			m_size = initSize;
 		}
 
 		~vector()
@@ -109,18 +60,12 @@ namespace ms {
 			m_charData(nullptr),
 			m_data(nullptr)
 		{
-			try {
-				m_charData = new char[other.capacity() * sizeof (Type)]();
-				m_data     = (Type*)m_charData;
-				m_capacity = other.capacity();
+			m_charData = new char[other.capacity() * sizeof (Type)]();
+			m_data     = (Type*)m_charData;
+			m_capacity = other.capacity();
 
-				copy(m_data, 0, other.size(), other.data());
-				m_size = other.size();
-			}
-			catch (...) {
-				this->~vector();
-				throw;
-			}
+			this->copy(m_data, 0, other.size(), other.data());
+			m_size = other.size();
 		}
 
 		vector& operator=(vector other)
@@ -151,26 +96,7 @@ namespace ms {
 			if (newCapacity <= m_capacity)
 				return;
 
-			char* newCharData = nullptr;
-			Type* newData     = nullptr;
-
-			try {
-				newCharData = new char[newCapacity * sizeof (Type)];
-				newData     = (Type*)newCharData;
-
-				size_t newSize = copy(newData, 0, m_size, m_data);
-				this->~vector();
-
-				m_size     = newSize;
-				m_capacity = newCapacity;
-				m_charData = newCharData;
-				m_data     = newData;
-			}
-			catch (...) {
-				delete [] newCharData;
-				this->~vector();
-				throw;
-			}
+			this->changeCapacity(newCapacity);
 		}
 
 		void shrink_to_fit()
@@ -178,26 +104,7 @@ namespace ms {
 			if (m_capacity <= m_size)
 				return;
 
-			char* newCharData = nullptr;
-			Type* newData     = nullptr;
-
-			try {
-				newCharData = new char[m_size * sizeof (Type)];
-				newData     = (Type*)newCharData;
-
-				size_t newSize = copy(newData, 0, m_size, m_data);
-				this->~vector();
-
-				m_size     = newSize;
-				m_capacity = newSize;
-				m_charData = newCharData;
-				m_data     = newData;
-			}
-			catch (...) {
-				delete [] newCharData;
-				this->~vector();
-				throw;
-			}
+			this->changeCapacity(m_size);
 		}
 
 		/* Element access */
@@ -270,20 +177,18 @@ namespace ms {
 		Type& insert(size_t pos, const Type& value)
 		{
 			pos = (pos > m_size) ? m_size : pos;
-			size_t newCapacity = 1ull << (sizeof m_size * 8 - 
-				                         (size_t)__builtin_clzl(m_size + 1));
-			this->reserve(newCapacity);
+			this->reserve(closestPowerOfTwo(m_size + 1));
 
 			try {
 				new (m_data + m_size) Type(value);
-				for (size_t i = m_size; i > pos; i--)
+				m_size++;
+
+				for (size_t i = m_size - 1; i > pos; i--)
 					m_data[i] = m_data[i - 1];
 
 				m_data[pos] = value;
-				m_size++;
 			}
 			catch (...) {
-				m_size++;
 				this->~vector();
 				throw;
 			}
@@ -325,22 +230,12 @@ namespace ms {
 		void resize(size_t newSize, const Type& value = Type())
 		{
 			if (m_size > newSize) {
-				for ( ; m_size > newSize; m_size--)
-					m_data[m_size - 1].~Type();
+				this->release(m_data, newSize, m_size - 1);
 			}
 			else if (m_size < newSize) {
-				newSize = (newSize > m_MAX_SIZE) ? (m_MAX_SIZE) : newSize;
-				size_t newCapacity = closestPowerOfTwo(newSize)
-				this->reserve(newCapacity);
-
-				try {
-					initialize(m_data, 0, newSize, value);
-					m_size = newSize;
-				}
-				catch (...) {
-					this->~vector();
-					throw;
-				}
+				this->reserve(closestPowerOfTwo(newSize));
+				this->initialize(m_data, 0, newSize, value);
+				m_size = newSize;
 			}
 		}
 
@@ -353,8 +248,84 @@ namespace ms {
 		}
 
 	private:
-		static const size_t m_MAX_SIZE = 1ull << 32;
+		/* Helper funcctions */
 
+		void changeCapacity(size_t newCapacity)
+		{
+			char* newCharData = nullptr;
+			Type* newData     = nullptr;
+
+			try {
+				newCharData = new char[newCapacity * sizeof (Type)];
+				newData     = (Type*)newCharData;
+
+				size_t newSize = this->copy(newData, 0, m_size, m_data);
+				this->~vector();
+
+				m_size     = newSize;
+				m_capacity = newCapacity;
+				m_charData = newCharData;
+				m_data     = newData;
+			}
+			catch (...) {
+				delete [] newCharData;
+				this->~vector();
+				throw;
+			}
+		}
+
+		inline size_t release(Type* data, size_t start, size_t end)
+		{
+			if (!data)
+				return 0;
+
+			for (size_t i = start; i < end; i++)
+				data[i].~Type();
+
+			return end - start;
+		}
+
+		inline size_t initialize(Type* data, size_t start, size_t end, const Type& value)
+		{
+			if (!data)
+				return 0;
+
+			size_t curSize = start;
+
+			try {
+				for ( ; curSize < end; curSize++)
+					new (data + curSize) Type(value);
+			}
+			catch (...) {
+				this->release(data, start, curSize);
+				this->~vector();
+				throw;
+			}
+
+			return end - start;
+		}
+
+		inline size_t copy(Type* dest, size_t start, size_t end, const Type* src)
+		{
+			if (!dest || !src)
+				return 0;
+
+			size_t curSize = start;
+
+			try {
+				for ( ; curSize < end; curSize++)
+					new (dest + curSize) Type(src[curSize]);
+			}
+			catch (...) {
+				this->release(dest, start, curSize);
+				this->~vector();
+				throw;
+			}
+
+			return end - start;
+		}
+
+	private:
 		size_t m_size     = 0;
 		size_t m_capacity = 0;
 
